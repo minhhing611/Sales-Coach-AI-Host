@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Stacked voice UI</title>
+
+    <style>
+      :root {
+        --accent: #4f46e5;
+        --bg: #f8f9fb;
+        --text: #333;
+      }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      /********  page ********/
+      body {
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;   /* keep the card vertically centred */
+  align-items: center;       /* keep everything horizontally centred */
+  background: var(--bg);
+  font-family: "Segoe UI", Tahoma, sans-serif;
+  color: var(--text);
+  padding: 2rem;
+}
+
+      /********  stacked card ********/
+      .stack {
+        width: clamp(300px, 90vw, 600px);
+        height: 400px; /* give the card a fixed height  */
+        display: grid; /* 1-cell grid → everything overlaps */
+        grid-template: 1fr/1fr;
+        border-radius: 16px;
+        overflow: hidden;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.09);
+        background: #fff;
+        position: relative;
+      }
+
+      /* 1. Transcript (bottom layer) */
+      .transcript-wrapper {
+        grid-area: 1/1;
+        padding: 1.25rem 1.5rem;
+        overflow-y: auto;
+        line-height: 1.55;
+      }
+      .transcript-wrapper::-webkit-scrollbar {
+        width: 6px;
+      }
+      .transcript-wrapper::-webkit-scrollbar-thumb {
+        background: var(--accent);
+        border-radius: 3px;
+      }
+      #transcript {
+        white-space: pre-wrap;
+      }
+
+      #talkBtn {
+  position: fixed;           /* anchor it to the viewport */
+  left: 50%;
+  bottom: 2rem;              /* distance from the bottom edge */
+  transform: translateX(-50%);
+
+  appearance: none;
+  border: none;
+  border-radius: 999px;
+  background: var(--accent);
+  padding: 1rem 2.5rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.35);
+  transition: transform 0.15s, box-shadow 0.15s, background 0.15s;
+}
+#talkBtn:hover  { background:#4338ca; box-shadow:0 6px 18px rgba(79,70,229,.45); }
+#talkBtn:active { transform:translateX(-50%) scale(.96); }
+
+      /* 3. Status line (top layer) */
+      #status {
+        grid-area: 1/1;
+        place-self: end center;
+        padding-bottom: 1rem;
+        font-size: 0.9rem;
+        color: #666;
+        z-index: 15;
+      }
+
+      /* Hidden audio element */
+      #remoteAudio {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="stack">
+        <!-- 1 -->
+        <div class="transcript-wrapper">
+          <p id="transcript">Transciption:</p>
+        </div>
+      
+        <!-- 3 -->
+        <p id="status" hidden="true">Idle</p>
+      </main>
+      
+      <!-- 2 – now OUTSIDE the stack -->
+      <button id="talkBtn">Start talking</button>
+      
+      <audio id="remoteAudio" autoplay></audio>
+
+    <script>
+      /* =========  Simple Speech-to-Speech client  ========= */
+
+      const talkBtn = document.getElementById("talkBtn");
+      const statusEl = document.getElementById("status");
+      const remoteEl = document.getElementById("remoteAudio");
+
+      let pc,
+        dc,
+        started = false;
+
+      async function startSession() {
+        const r = await fetch("https://api.openai.com/v1/realtime/sessions", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${OPENAI_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "gpt-4o-realtime-preview-2024-12-17",
+            voice: "alloy",
+            instructions: script,
+            input_audio_transcription: {
+              model: "gpt-4o-transcribe",
+              language: "en",
+            },
+          }),
+        });
+
+        if (!r.ok) {
+          status("Cannot get token");
+          return;
+        }
+        const data = await r.json();
+        const EPHEMERAL_KEY = data.client_secret.value; // { client_secret: { value: … } }
+
+        /* ----  Create PeerConnection  ---- */
+        status("Initialising WebRTC…");
+        pc = new RTCPeerConnection();
+
+        /* Remote audio sent by the model  */
+        pc.ontrack = (e) => (remoteEl.srcObject = e.streams[0]);
+
+        /* DataChannel for events (optional but useful for logging) */
+        dc = pc.createDataChannel("oai-events");
+        const transcriptDiv = document.getElementById("transcript");
+
+        dc.onmessage = (e) => {
+          const ev = JSON.parse(e.data);
+
+          console.log("server event: ", ev.type, ev);
+
+          if (
+            ev.type ===
+              "conversation.item.input_audio_transcription.completed" &&
+            ev.transcript
+          ) {
+            addLine("User", ev.transcript);
+          } else if (
+            ev.type === "response.audio_transcript.done" &&
+            ev.transcript
+          ) {
+            addLine("Prospect", ev.transcript);
+          }
+        };
+
+        /* helper that puts one new <p> element into the div */
+        function addLine(speaker, text) {
+          // remove the “Waiting …” line the first time we get real text
+          if (speaker && text) {
+            setTimeout(() => {
+              const p = document.createElement("p");
+              p.textContent = `${speaker}: ${text}`;
+              transcriptDiv.appendChild(p);
+
+              // keep the latest line visible
+              transcriptDiv.scrollTop = transcriptDiv.scrollHeight;
+            }, 2000);
+          }
+        }
+
+        /* Local mic -> peer connection */
+        const mic = await navigator.mediaDevices.getUserMedia({ audio: true });
+        pc.addTrack(mic.getTracks()[0]);
+
+        /* ----  SDP offer / answer (per docs)  ---- */
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+
+        const MODEL = "gpt-4o-realtime-preview-2024-12-17";
+        const resp = await fetch(
+          `https://api.openai.com/v1/realtime?model=${MODEL}`,
+          {
+            method: "POST",
+            body: offer.sdp,
+            headers: {
+              Authorization: `Bearer ${EPHEMERAL_KEY}`,
+              "Content-Type": "application/sdp",
+            },
+          }
+        );
+
+        if (!resp.ok) {
+          const txt = await resp.text();
+          console.error(txt);
+          status("Realtime API error. See console.");
+          return;
+        }
+
+        const answerSDP = await resp.text();
+        await pc.setRemoteDescription({ type: "answer", sdp: answerSDP });
+
+        status("Connected! Speak freely");
+      }
+
+      function stopSession() {
+        status("Closing session…");
+        dc?.close();
+        pc?.getSenders().forEach((s) => s.track?.stop());
+        pc?.close();
+        dc = pc = null;
+        status("Idle");
+      }
+
+      /* ----  Helpers  ---- */
+      function status(msg) {
+        statusEl.textContent = msg;
+      }
+
+      talkBtn.onclick = async () => {
+        talkBtn.disabled = true;
+        if (!started) {
+          await startSession();
+          talkBtn.textContent = "Stop";
+        } else {
+          stopSession();
+          talkBtn.textContent = "Start talking";
+        }
+        started = !started;
+        talkBtn.disabled = false;
+      };
+    </script>
+    <script>
+     
+      const OPENAI_API_KEY = sessionStorage.getItem("apiKey");
+      const industry = sessionStorage.getItem("industry");
+      const job = sessionStorage.getItem("job");
+      const priorInfo = sessionStorage.getItem("priorInfo");
+      const interest = sessionStorage.getItem("interest");
+      const painPoint = sessionStorage.getItem("painPoint");
+      const tone = sessionStorage.getItem("tone");
+
+      let script =
+        `You are acting as [Sally], who is a potential client and just received a cold call. You worked in the [${industry}] industry as a [${job}]. Previously [${priorInfo}]. Your pain point is [${painPoint}]. Your interest level is [${interest}]. Your tone is [${tone}] Your purpose is to make this call as realistic as possible and remember you both don't know much about each other, so don't overshare unless asked. Most importantly is to help them with [Objection Handling], so gear the conversation towards that direction.`;
+
+      console.log({
+        OPENAI_API_KEY,
+        industry,
+        job,
+        priorInfo,
+        interest,
+        painPoint,
+        tone,
+      });
+    </script>
+  </body>
+</html>
