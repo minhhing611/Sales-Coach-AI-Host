@@ -1,11 +1,210 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
-</head>
-<body>
-    <h1>Hello</h1>
-</body>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Sales Coach AI</title>
+    <style>
+      body {
+        font-family: sans-serif;
+        margin: 2rem;
+      }
+
+      /* ====== RESET / BASE ====== */
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+
+      :root {
+        /* Easily tweak theme colours here */
+        --clr-primary: #6366f1;
+        --clr-bg: #f4f6fb;
+        --clr-text: #222;
+        --clr-label: #555;
+        --clr-input: #f9fafc;
+        --radius: 10px;
+        --shadow: 0 10px 24px rgba(0, 0, 0, 0.07);
+        --transition: 0.25s ease;
+      }
+
+      /* ====== SUBMIT BUTTON ====== */
+      input[type="submit"] {
+        display: block; /* NEW — makes it span the full line */
+        margin: 2rem auto 0;
+        background: var(--clr-primary); /* brand colour */
+        color: #fff;
+        border: none;
+        padding: 0.75rem 1.5rem;
+        font-size: 1rem;
+        font-weight: 600;
+        border-radius: var(--radius);
+        cursor: pointer;
+        letter-spacing: 0.3px;
+        transition: background var(--transition), box-shadow var(--transition),
+          transform 0.15s ease;
+      }
+
+      /* hover / focus states */
+      input[type="submit"]:hover,
+      input[type="submit"]:focus {
+        background: #4f52f7; /* slightly lighter */
+        box-shadow: 0 6px 18px rgba(99, 102, 241, 0.3);
+        outline: none; /* remove default focus ring */
+      }
+
+      /* pressed state */
+      input[type="submit"]:active {
+        transform: translateY(1px);
+      }
+
+      body {
+        margin: 0;
+        font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+        background: var(--clr-bg);
+        color: var(--clr-text);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        padding: 1.5rem;
+      }
+
+      /* ====== CONTAINER ====== */
+      #buyerDiv {
+        background: #fff;
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        padding: 2rem 2.5rem;
+        max-width: 500px;
+        width: 100%;
+      }
+
+      #buyerDiv h1 {
+        margin: 0 0 1.75rem;
+        font-size: 1.8rem;
+        letter-spacing: -0.5px;
+      }
+
+      /* ====== FORM ROWS ====== */
+      .form-row {
+        display: grid;
+        grid-template-columns: 140px 1fr;
+        gap: 0.8rem;
+        margin-bottom: 1.25rem;
+        align-items: center;
+      }
+
+      /* Stack label / input on very small screens */
+      @media (max-width: 480px) {
+        .form-row {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      /* ====== LABELS & INPUTS ====== */
+      .form-row label {
+        font-weight: 600;
+        color: var(--clr-label);
+        white-space: nowrap;
+      }
+
+      .form-row input {
+        width: 100%;
+        padding: 0.65rem 0.9rem;
+        font-size: 1rem;
+        border: 1px solid #dfe3e8;
+        border-radius: var(--radius);
+        background: var(--clr-input);
+        transition: border var(--transition), box-shadow var(--transition);
+      }
+
+      .form-row input:focus {
+        outline: none;
+        border-color: var(--clr-primary);
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.25);
+        background: #fff;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="buyerDiv" style="margin-bottom: 40px">
+      <h1>Sally's profile</h1>
+
+      <form action="AISpeech.html">
+        <div class="form-row">
+          <label for="apiKey">API Key: </label>
+          <input id="apiKey" type="text" value="API Key" />
+        </div>
+        <br />
+        <div class="form-row">
+          <label for="industry">Industry: </label>
+          <input id="industry" type="text" value="Gym" />
+        </div>
+        <div class="form-row">
+          <label for="job">Job: </label>
+          <input id="job" type="text" value="Personal Trainer" />
+        </div>
+        <div class="form-row">
+          <label for="priorInfo">Prior Info:</label>
+          <input
+            id="priorInfo"
+            type="text"
+            value="Indicated interest in knowing more about Abs trainer"
+          />
+        </div>
+        <div class="form-row">
+          <label for="interest">Interest Level:</label>
+          <input id="interest" type="text" value="Medium" />
+        </div>
+        <div class="form-row">
+          <label for="painPoint">Pain Point:</label>
+          <input
+            id="painPoint"
+            type="text"
+            value="Wants to improve her own selling skill"
+          />
+        </div>
+        <div class="form-row">
+          <label for="tone">Tone:</label>
+          <input id="tone" type="text" value="Neutral, slightly tired" />
+        </div>
+        <input type="submit" value="Submit" />
+      </form>
+    </div>
+    <script>
+      document
+        .querySelector("form")
+        .addEventListener("submit", function (event) {
+          event.preventDefault(); // Stop default form behavior
+
+          // Store form values in sessionStorage
+          sessionStorage.setItem(
+            "apiKey",
+            document.getElementById("apiKey").value
+          );
+          sessionStorage.setItem(
+            "industry",
+            document.getElementById("industry").value
+          );
+          sessionStorage.setItem("job", document.getElementById("job").value);
+          sessionStorage.setItem(
+            "priorInfo",
+            document.getElementById("priorInfo").value
+          );
+          sessionStorage.setItem(
+            "interest",
+            document.getElementById("interest").value
+          );
+          sessionStorage.setItem(
+            "painPoint",
+            document.getElementById("painPoint").value
+          );
+          sessionStorage.setItem("tone", document.getElementById("tone").value);
+
+          // Manually navigate to the next page
+          window.location.href = "AISpeech.html";
+        });
+    </script>
+  </body>
 </html>
